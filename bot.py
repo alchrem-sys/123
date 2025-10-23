@@ -1,6 +1,7 @@
 import json
 import os
-from datetime import time
+import asyncio
+from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -81,21 +82,31 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 Баланс: {balance:.2f}"
         )
     except ValueError:
-        pass  # Ігноруємо все, що не число і не "прокрутив"
+        pass
 
 # ---------- Нагадування ----------
-async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
-    for user_id, data in user_data.items():
-        if not data.get("reminded", False):
-            try:
-                await context.bot.send_message(
-                    chat_id=int(user_id),
-                    text="Прокрути альфу!!!!!!!"
-                )
-            except:
-                pass
-        data["reminded"] = False
-    save_data()
+async def daily_reminder(app):
+    while True:
+        now = datetime.utcnow()
+        # Розрахунок часу до 23:00 Київ (UTC+3)
+        target = datetime.utcnow().replace(hour=20, minute=0, second=0, microsecond=0)
+        if now > target:
+            target += timedelta(days=1)
+        await asyncio.sleep((target - now).total_seconds())
+
+        for user_id, data in user_data.items():
+            if not data.get("reminded", False):
+                try:
+                    await app.bot.send_message(
+                        chat_id=int(user_id),
+                        text="Прокрути альфу!!!!!!!"
+                    )
+                except:
+                    pass
+            data["reminded"] = False
+        save_data()
+        # Через годину повтор, якщо не написав
+        await asyncio.sleep(3600)
 
 # ---------- Запуск ----------
 async def main():
@@ -105,11 +116,8 @@ async def main():
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
 
-    # JobQueue для щоденних нагадувань о 23:00 Київ
-    app.job_queue.run_daily(
-        daily_reminder,
-        time=time(hour=23, minute=0)
-    )
+    # Запускаємо нескінченне щоденне нагадування
+    asyncio.create_task(daily_reminder(app))
 
     print("🤖 Бот запущено на Railway Worker!")
     await app.run_polling()
