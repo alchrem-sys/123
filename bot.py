@@ -1,20 +1,18 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from asyncio import sleep
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
+# ================== Налаштування ==================
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
     raise ValueError("❌ Не знайдено TOKEN у змінних середовища!")
 
-# Директорія для збереження даних
-DATA_DIR = "/data"
-DATA_FILE = os.path.join(DATA_DIR, "data.json")
-os.makedirs(DATA_DIR, exist_ok=True)
+DATA_FILE = "data.json"
 
-# ---------- ЗАВАНТАЖЕННЯ / ЗБЕРЕЖЕННЯ ДАНИХ ----------
+# ================== Завантаження/збереження ==================
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -26,19 +24,19 @@ def save_data():
         json.dump(user_data, f, ensure_ascii=False, indent=2)
 
 user_data = load_data()
-last_reminder_hour = {}  # для відстеження нагадувань по годині
 
+# ================== Повідомлення ==================
 WELCOME_TEXT = (
     "Щоб запустити бота - /start.\n"
     "Писати лише +1;-10;+107;-2.\n"
     "Щоб скинути цифри напиши /reset\n"
     "Цифри повинні бути зі знаком.\n"
-    "Кожного дня в 20:00 UTC буде приходити нагадування «прокрути альфу», "
-    "пиши «прокрутив», якщо не написав через годину знову прийде таке нагадування.\n"
+    "Кожного дня в 23:00 Київського часу буде нагадування «прокрути альфу», "
+    "пиши «прокрутив», якщо не написав — через годину нагадає знову.\n"
     "ПИСАТИ ЛИШЕ ЦИФРИ ТА «ПРОКРУТИВ», цей бот більше нічого не розуміє))"
 )
 
-# ---------- HANDLERS ----------
+# ================== HANDLERS ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in user_data:
@@ -75,7 +73,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 user_data[user_id]["minus"] += abs(number)
 
-            # округлюємо до 2 знаків
+            # округлюємо до 2 знаків після коми
             user_data[user_id]["plus"] = round(user_data[user_id]["plus"], 2)
             user_data[user_id]["minus"] = round(user_data[user_id]["minus"], 2)
             save_data()
@@ -94,31 +92,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Пишіть лише числа зі знаком або «прокрутив».")
 
-# ---------- DAILY REMINDER ----------
+# ================== DAILY REMINDER ==================
 async def daily_reminder(app):
-    last_day = None
+    last_reminder_day = None
     while True:
-        now = datetime.now(timezone.utc)
-        current_day = now.date()
+        now_utc = datetime.now(timezone.utc)
+        # Київський час UTC+3
+        now_kyiv = now_utc + timedelta(hours=3)
+        current_day = now_kyiv.date()
+        current_hour = now_kyiv.hour
 
-        # Скидання ack на початку нового дня о 20:00 UTC
-        if last_day != current_day and now.hour >= 20:
+        # Скидання ack щодня о 23:00 Київського часу
+        if last_reminder_day != current_day and current_hour >= 23:
             for user_id in user_data:
                 user_data[user_id]["ack"] = False
             save_data()
-            last_day = current_day
+            last_reminder_day = current_day
 
-        # Надсилання нагадувань о 20:00 та 21:00 UTC
+        # Надсилання нагадувань о 23:00 та 00:00
         for user_id, data in user_data.items():
-            if now.hour in [20, 21] and not data.get("ack", False):
-                last_reminder = last_reminder_hour.get(user_id, None)
-                if last_reminder != now.hour:
-                    await app.bot.send_message(chat_id=int(user_id), text="🌀 Прокрути альфу!!!!!!!")
-                    last_reminder_hour[user_id] = now.hour
+            if current_hour in [23, 0] and not data.get("ack", False):
+                await app.bot.send_message(chat_id=int(user_id), text="🌀 Прокрути альфу!!!!!!!")
 
         await sleep(60)
 
-# ---------- RUN ----------
+# ================== RUN BOT ==================
 async def on_startup(app):
     app.create_task(daily_reminder(app))
 
@@ -127,5 +125,5 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("reset", reset))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-print("🤖 Бот працює на Railway Worker!")
+print("🤖 Бот запущено на Railway Worker!")
 app.run_polling()
