@@ -45,4 +45,4 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if number > 0:
             user_data[user_id]["plus"] += number
         else:
-            user_data[u]()_
+\
