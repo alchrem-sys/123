@@ -44,5 +44,4 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         number = float(text)
         if number > 0:
             user_data[user_id]["plus"] += number
-        else:
-\
+
