@@ -86,7 +86,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-
-git config --global user.name "Losha"
-PS C:\Users\Losha\Desktop\telegram_bot_online> git config --global user.email "al.chrem@gmail.com"
