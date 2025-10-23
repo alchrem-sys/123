@@ -1,6 +1,5 @@
 import json
 import os
-import asyncio
 from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -10,10 +9,9 @@ TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
     raise ValueError("❌ Не знайдено TOKEN у змінних середовища!")
 
-# ---------- ЗБЕРЕЖЕННЯ ----------
-DATA_DIR = "/data"  # постійна директорія на Railway (Volume)
+# ---------- DATA ----------
+DATA_DIR = "/data"
 DATA_FILE = os.path.join(DATA_DIR, "data.json")
-
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def load_data():
@@ -26,11 +24,10 @@ def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(user_data, f, ensure_ascii=False, indent=2)
 
-# ---------- ДАНІ ----------
 user_data = load_data()
 last_ack = None
 
-# ---------- ЛОГІКА ----------
+# ---------- LOGIC ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     if user_id not in user_data:
@@ -77,34 +74,28 @@ async def pokrutyv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_ack = datetime.now(timezone.utc).hour
     await update.message.reply_text("✅ Добре, не нагадаю ще раз!")
 
-# ---------- НАГАДУВАННЯ ----------
 async def daily_reminder(app):
     global last_ack
     while True:
+        from asyncio import sleep
         now = datetime.now(timezone.utc)
         if now.hour in [20, 21]:
             if last_ack != now.hour:
                 for user_id in user_data.keys():
                     await app.bot.send_message(chat_id=int(user_id), text="🌀 Покрути альфу!!!!!!!")
                 last_ack = now.hour
-        await asyncio.sleep(60)
+        await sleep(60)
 
-# ---------- ЗАПУСК ----------
-# ---------- ЗАПУСК ----------
-if __name__ == "__main__":
-    import asyncio
+# ---------- RUN ----------
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("reset", reset))
+app.add_handler(CommandHandler("pokruviv", pokrutyv))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
 
-    async def runner():
-        app = ApplicationBuilder().token(TOKEN).build()
+# запускаємо нагадування у фоновій тасці
+import asyncio
+asyncio.create_task(daily_reminder(app))
 
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("reset", reset))
-        app.add_handler(CommandHandler("pokruviv", pokrutyv))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
-
-        asyncio.create_task(daily_reminder(app))
-        print("🤖 Бот працює на Railway Worker!")
-        await app.run_polling()
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(runner())
+print("🤖 Бот працює на Railway Worker!")
+app.run_polling()  # <--- запуск без asyncio.run()
