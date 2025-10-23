@@ -1,7 +1,7 @@
 import json
 import os
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -87,11 +87,13 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- Нагадування ----------
 async def daily_reminder(app):
     while True:
-        now = datetime.utcnow()
-        # Розрахунок часу до 23:00 Київ (UTC+3)
-        target = datetime.utcnow().replace(hour=20, minute=0, second=0, microsecond=0)
+        now = datetime.now(timezone.utc)
+        # 23:00 Київ (UTC+3)
+        target = now.astimezone(timezone(timedelta(hours=3))).replace(hour=23, minute=0, second=0, microsecond=0)
+        target = target.astimezone(timezone.utc)
         if now > target:
             target += timedelta(days=1)
+
         await asyncio.sleep((target - now).total_seconds())
 
         for user_id, data in user_data.items():
@@ -116,11 +118,15 @@ async def main():
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
 
-    # Запускаємо нескінченне щоденне нагадування
+    # Запускаємо нагадування
     asyncio.create_task(daily_reminder(app))
 
     print("🤖 Бот запущено на Railway Worker!")
     await app.run_polling()
 
-import asyncio
-asyncio.run(main())
+# Виклик без asyncio.run() для Railway
+if __name__ == "__main__":
+    import nest_asyncio
+    nest_asyncio.apply()
+    asyncio.get_event_loop().create_task(main())
+    asyncio.get_event_loop().run_forever()
