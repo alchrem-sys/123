@@ -90,17 +90,21 @@ async def daily_reminder(app):
         await asyncio.sleep(60)
 
 # ---------- ЗАПУСК ----------
-async def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("pokruviv", pokrutyv))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
-
-    asyncio.create_task(daily_reminder(app))
-    print("🤖 Бот працює на Railway Worker!")
-    await app.run_polling()
-
+# ---------- ЗАПУСК ----------
 if __name__ == "__main__":
-    asyncio.run(main())
+    import asyncio
+
+    async def runner():
+        app = ApplicationBuilder().token(TOKEN).build()
+
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("reset", reset))
+        app.add_handler(CommandHandler("pokruviv", pokrutyv))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
+
+        asyncio.create_task(daily_reminder(app))
+        print("🤖 Бот працює на Railway Worker!")
+        await app.run_polling()
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(runner())
