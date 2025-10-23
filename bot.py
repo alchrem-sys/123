@@ -40,8 +40,21 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().replace(",", ".")
     if user_id not in user_data:
         user_data[user_id] = {"plus": 0.0, "minus": 0.0}
-    try:
-        number = float(text)
-        if number > 0:
-            user_data[user_id]["plus"] += number
+   try:
+    number = float(text)
+    if number > 0:
+        user_data[user_id]["plus"] += number
+    else:
+        user_data[user_id]["minus"] += abs(number)
+    save_data()
 
+    total_plus = user_data[user_id]["plus"]
+    total_minus = user_data[user_id]["minus"]
+    balance = total_plus - total_minus
+
+    await update.message.reply_text(
+        f"✅ Плюс: {total_plus}\n❌ Мінус: {total_minus}\n💰 Баланс: {balance}"
+    )
+
+except ValueError:
+    await update.message.reply_text("Будь ласка, надішли число типу +50 або -20.")
