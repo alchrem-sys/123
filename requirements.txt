@@ -1,0 +1,5 @@
+python-telegram-bot==20.3
+
+
+git config --global user.name "huy"
+git config --global user.email "al.chrem@gmail.com"
