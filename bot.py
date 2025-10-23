@@ -4,8 +4,11 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 
-import os
-TOKEN = os.getenv("8435130554:AAFlmudax3DgjOaHI5nYNTrr7eBo-zKQNW0")
+
+TOKEN = os.environ.get("TOKEN")
+
+app = ApplicationBuilder().token(TOKEN).build()
+
 
 
 DATA_FILE = "data.json"
