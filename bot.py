@@ -1,19 +1,17 @@
 import json
 import os
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-
-
+# ---------- TOKEN ----------
 TOKEN = os.environ.get("TOKEN")
+if not TOKEN:
+    raise ValueError("❌ TOKEN не знайдено! Додай змінну середовища у Render (Name: TOKEN, Value: твій токен від BotFather)")
 
-app = ApplicationBuilder().token(TOKEN).build()
-
-
-
+# ---------- ДАНІ ----------
 DATA_FILE = "data.json"
-
-# ---------- ЗАВАНТАЖЕННЯ / ЗБЕРЕЖЕННЯ ДАНИХ ----------
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -25,9 +23,9 @@ def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(user_data, f, ensure_ascii=False, indent=2)
 
-# ---------- ОСНОВНА ЛОГІКА ----------
-
 user_data = load_data()
+
+# ---------- ОСНОВНА ЛОГІКА ----------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -42,7 +40,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     text = update.message.text.strip().replace(",", ".")  # підтримка ком
-
     if user_id not in user_data:
         user_data[user_id] = {"plus": 0.0, "minus": 0.0}
 
@@ -74,18 +71,26 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data()
     await update.message.reply_text("✅ Дані скинуто. Починай спочатку!")
 
-# ---------- ЗАПУСК ----------
-
-def main():
+# ---------- TELEGRAM ----------
+def run_bot():
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
-
     print("🤖 Бот запущено. Не закривай це вікно.")
     app.run_polling()
 
-if __name__ == "__main__":
-    main()
+# ---------- FLASK ----------
+flask_app = Flask(__name__)
 
+@flask_app.route("/")
+def index():
+    return "✅ Telegram бот працює на Render!"
+
+# ---------- MAIN ----------
+if __name__ == "__main__":
+    # запускаємо бота у потоці
+    Thread(target=run_bot).start()
+    # запускаємо Flask для Render
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
