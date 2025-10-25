@@ -1,132 +1,157 @@
-import json
-import os
 import asyncio
+import os
+import json
 from datetime import datetime, timedelta, timezone
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ContextTypes,
-)
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-TOKEN = os.environ.get("TOKEN")
+# -------------------- Налаштування --------------------
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    print("❌ Токен не встановлений!")
+    exit(1)
+
+ADMIN_ID = 868931721  # <- твій Telegram ID
 DATA_FILE = "data.json"
 
-# ---------- Дані ----------
+# -------------------- Збереження даних --------------------
+data_lock = asyncio.Lock()
+
 def load_data():
-    if os.path.exists(DATA_FILE):
+    try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {}
+    except FileNotFoundError:
+        return {}
 
-def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(user_data, f, ensure_ascii=False, indent=2)
+data = load_data()
 
-user_data = load_data()
+async def save_data():
+    async with data_lock:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
 
-# ---------- Команди ----------
+# -------------------- Команди --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    if user_id not in user_data:
-        user_data[user_id] = {"plus": 0.0, "minus": 0.0, "reminded": False}
-        save_data()
-
+    if user_id not in data:
+        data[user_id] = {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
+        await save_data()
     await update.message.reply_text(
-        "Щоб запустити бота - /start.\n"
-        "Писати лише +1;-10;+107;-2.\n"
-        "Щоб скинути цифри напиши /reset\n"
-        "Цифри повинні бути зі знаком + або -.\n"
-        "Кожного дня в 23:00 Київ буде приходити нагадування «Прокрути альфу!!!!!!!».\n"
-        "Пиши «прокрутив», якщо прокрутив.\n"
-        "ПИСАТИ ЛИШЕ ЦИФРИ ТА «ПРОКРУТИВ», цей бот більше нічого не розуміє))"
+        "👋 Привіт, Я бот для фіксації плюсів і мінусів на альфі.\n\n"
+        "Пиши типу +5 або -3, щоб оновити баланс.\n"
+        "Команда /reset — скинути баланс.\n\n"
+        "Коли рестартаю бот, числа не запам'ятовуються.\n"
+        "Щодня о 23:00 за Києвом приходить нагадування 🔔 «прокрути альфу».\n"
+        "Напиши «прокрутив», щоб підтвердити.\n\n"
+        "Якщо будуть можливі перезапуски - я вам повідомлю і щоб отримувати нагадування знову - вам потрібно буде натиснути /start знову. (25$ на сервер це дохуя)\n\n"
+        "Знайшли помилку? - @l1oxsha"
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data[user_id] = {"plus": 0.0, "minus": 0.0, "reminded": False}
-    save_data()
-    await update.message.reply_text("✅ Дані скинуто. Починай спочатку!")
+    data[user_id] = {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
+    await save_data()
+    await update.message.reply_text("✅ Баланс скинуто!")
 
-async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    text = update.message.text.strip().lower().replace(",", ".")
+    text = update.message.text.strip().lower()
 
-    if text == "прокрутив":
-        if user_id in user_data:
-            user_data[user_id]["reminded"] = True
-            save_data()
+    if user_id not in data:
+        data[user_id] = {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
+
+    if text.startswith(("+", "-")):
+        try:
+            value = float(text.replace(" ", ""))
+            if value > 0:
+                data[user_id]["plus"] += value
+            else:
+                data[user_id]["minus"] += abs(value)
+
+            data[user_id]["balance"] = round(data[user_id]["plus"] - data[user_id]["minus"], 2)
+            await save_data()
+
+            await update.message.reply_text(
+                f"✅ Плюс: {round(data[user_id]['plus'], 2)}\n"
+                f"❌ Мінус: {round(data[user_id]['minus'], 2)}\n"
+                f"💰 Баланс: {round(data[user_id]['balance'], 2)}"
+            )
+        except ValueError:
+            await update.message.reply_text("Пиши лише числа зі знаком (+5 або -3).")
+    elif "прокрутив" in text:
+        data[user_id]["last_ack"] = datetime.now(timezone.utc).isoformat()
+        await save_data()
+        await update.message.reply_text("🔥 Красава, альфа прокручена")
+    else:
+        await update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
+
+# -------------------- Адмін-розсилка --------------------
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Тільки адміністратор може використовувати цю команду.")
         return
 
-    try:
-        number = float(text)
-        if user_id not in user_data:
-            user_data[user_id] = {"plus": 0.0, "minus": 0.0, "reminded": False}
+    if not context.args:
+        await update.message.reply_text("❌ Вкажи повідомлення для розсилки: /broadcast Текст")
+        return
 
-        if number > 0:
-            user_data[user_id]["plus"] += number
-        else:
-            user_data[user_id]["minus"] += abs(number)
+    message = " ".join(context.args)
+    success, fail = 0, 0
 
-        save_data()
+    for uid in data.keys():
+        try:
+            await context.bot.send_message(chat_id=int(uid), text=message)
+            success += 1
+        except Exception as e:
+            print(f"⚠️ Не вдалося надіслати {uid}: {e}")
+            fail += 1
 
-        total_plus = round(user_data[user_id]["plus"], 2)
-        total_minus = round(user_data[user_id]["minus"], 2)
-        balance = round(total_plus - total_minus, 2)
+    await update.message.reply_text(f"✅ Розсилка завершена! Успішно: {success}, Не вдалося: {fail}")
 
-        await update.message.reply_text(
-            f"✅ Плюс: {total_plus:.2f}\n"
-            f"❌ Мінус: {total_minus:.2f}\n"
-            f"💰 Баланс: {balance:.2f}"
-        )
-    except ValueError:
-        pass
-
-# ---------- Нагадування ----------
-async def daily_reminder(app):
+# -------------------- Щоденні нагадування --------------------
+async def daily_reminder(app: Application):
     while True:
         now = datetime.now(timezone.utc)
-        # 23:00 Київ (UTC+3)
-        target = now.astimezone(timezone(timedelta(hours=3))).replace(hour=23, minute=0, second=0, microsecond=0)
-        target = target.astimezone(timezone.utc)
+        target = now.replace(hour=20, minute=0, second=0, microsecond=0)  # 23:00 Київ
         if now > target:
             target += timedelta(days=1)
 
         await asyncio.sleep((target - now).total_seconds())
 
-        for user_id, data in user_data.items():
-            if not data.get("reminded", False):
-                try:
-                    await app.bot.send_message(
-                        chat_id=int(user_id),
-                        text="Прокрути альфу!!!!!!!"
-                    )
-                except:
-                    pass
-            data["reminded"] = False
-        save_data()
-        # Через годину повтор, якщо не написав
-        await asyncio.sleep(3600)
+        for user_id in data.keys():
+            try:
+                await app.bot.send_message(chat_id=int(user_id), text="🔔 Прокрути альфу!")
+            except Exception as e:
+                print(f"⚠️ Не вдалося надіслати {user_id}: {e}")
 
-# ---------- Запуск ----------
-async def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+        # Друге нагадування через годину
+        await asyncio.sleep(3600)
+        for user_id in data.keys():
+            try:
+                await app.bot.send_message(chat_id=int(user_id), text="⏰ Якщо ще не прокрутив — саме час!")
+            except Exception as e:
+                print(f"⚠️ Не вдалося надіслати (2) {user_id}: {e}")
+
+# -------------------- Основна функція --------------------
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Запускаємо нагадування
-    asyncio.create_task(daily_reminder(app))
+    async def start_reminder(app: Application):
+        asyncio.create_task(daily_reminder(app))
 
-    print("🤖 Бот запущено на Railway Worker!")
-    await app.run_polling()
+    app.post_init = start_reminder
 
-# Виклик без asyncio.run() для Railway
+    print("🤖 Бот запущено!")
+    app.run_polling()
+
 if __name__ == "__main__":
-    import nest_asyncio
-    nest_asyncio.apply()
-    asyncio.get_event_loop().create_task(main())
-    asyncio.get_event_loop().run_forever()
+    main()
+
+
+
