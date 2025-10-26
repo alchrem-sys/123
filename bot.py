@@ -78,13 +78,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💰 Баланс: {round(user_data['balance'], 2)}"
             )
         except ValueError:
-            await update.message.reply_text("Пиши лише числа зі знаком (+5 або -3).")
+            await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
     elif "прокрутив" in text:
         user_data["last_ack"] = datetime.now(timezone.utc).isoformat()
         save_user(user_id, user_data)
         await update.message.reply_text("🔥 Красава, альфа прокручена")
     else:
-        await update.message.reply_text("Пиши лише числа або «прокрутив підар» 😉")
+        await update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
 
 # -------------------- Адмін-розсилка --------------------
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
