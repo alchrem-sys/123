@@ -114,7 +114,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def daily_reminder(app: Application):
     while True:
         now = datetime.now(timezone.utc)
-        target = now.replace(hour=20, minute=0, second=0, microsecond=0)
+        target = now.replace(hour=21, minute=0, second=0, microsecond=0)
         if now > target:
             target += timedelta(days=1)
 
@@ -128,7 +128,7 @@ async def daily_reminder(app: Application):
                 print(f"⚠️ Не вдалося надіслати {uid}: {e}")
 
         # Друге нагадування через годину
-        await asyncio.sleep(3600)
+        await asyncio.sleep(7200)
         for uid in keys:
             try:
                 await app.bot.send_message(chat_id=int(uid), text="⏰ Якщо ще не прокрутив — саме час!")
