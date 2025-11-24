@@ -1,9 +1,8 @@
-
 import os
 import json
 import asyncio
 from datetime import datetime, timedelta, timezone
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from upstash_redis import Redis
 
@@ -57,11 +56,14 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(user_id, user_data)
     await update.message.reply_text("✅ Баланс скинуто!")
 
+# -------------------- Обробка тексту --------------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_data = get_user(user_id)
 
     text = update.message.text.strip().lower()
+
+    # --- Якщо + або -
     if text.startswith(("+", "-")):
         try:
             value = float(text.replace(" ", ""))
@@ -73,19 +75,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_data["balance"] = round(user_data["plus"] - user_data["minus"], 2)
             save_user(user_id, user_data)
 
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Канал Автора", url="https://t.me/l1xosha")]
+            ])
+
             await update.message.reply_text(
                 f"✅ Плюс: {round(user_data['plus'], 2)}\n"
                 f"❌ Мінус: {round(user_data['minus'], 2)}\n"
-                f"💰 Баланс: {round(user_data['balance'], 2)}"
+                f"💰 Баланс: {round(user_data['balance'], 2)}",
+                reply_markup=keyboard
             )
+
         except ValueError:
             await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
-    elif "прокрутив" in text:
+        return
+
+    # --- Якщо написав "прокрутив"
+    if "прокрутив" in text:
         user_data["last_ack"] = datetime.now(timezone.utc).isoformat()
         save_user(user_id, user_data)
         await update.message.reply_text("🔥 Красава, альфа прокручена")
-    else:
-        await update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
+        return
+
+    # Інший текст
+    await update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
 
 # -------------------- Адмін-розсилка --------------------
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -128,7 +141,7 @@ async def daily_reminder(app: Application):
             except Exception as e:
                 print(f"⚠️ Не вдалося надіслати {uid}: {e}")
 
-        # Друге нагадування через годину
+        # Друге нагадування через 2 години
         await asyncio.sleep(7200)
         for uid in keys:
             try:
@@ -150,7 +163,7 @@ def main():
 
     app.post_init = start_tasks
 
-    print("🤖 Бот запущено з Upstash Redis (синхронний)!")
+    print("🤖 Бот запущено з Upstash Redis!")
     app.run_polling()
 
 if __name__ == "__main__":
