@@ -145,7 +145,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_data["balance"] = round(user_data.get("plus", 0.0) - user_data.get("minus", 0.0), 2)
             save_user(user_id, user_data)
 
-            text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
+            text_safe = '<a href="https://t.me/+CYIi22BbbV5lZWZi">Канал Автора</a>'
             await update.message.reply_text(
                 f"✅ Плюс: {user_data['plus']:.2f}\n"
                 f"❌ Мінус: {user_data['minus']:.2f}\n"
