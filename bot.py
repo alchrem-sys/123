@@ -26,23 +26,23 @@ if not REDIS_URL or not REDIS_TOKEN:
 redis = Redis(url=REDIS_URL, token=REDIS_TOKEN)
 
 # -------------------- Функції для користувачів --------------------
-async def get_user(user_id: str):
-    data = await redis.get(user_id)
+def get_user(user_id: str):
+    data = redis.get(user_id)
     if data:
         return json.loads(data)
     return {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
 
-async def save_user(user_id: str, user_data: dict):
-    await redis.set(user_id, json.dumps(user_data))
-    await redis.sadd("users", user_id)  # Для зручної розсилки
+def save_user(user_id: str, user_data: dict):
+    redis.set(user_id, json.dumps(user_data))
+    redis.sadd("users", user_id)  # Для розсилки
 
 # -------------------- Команди --------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data = await get_user(user_id)
-    await save_user(user_id, user_data)
+    user_data = get_user(user_id)
+    save_user(user_id, user_data)
     text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
-    await update.message.reply_text(
+    update.message.reply_text(
         "👋 Привіт! Я бот для фіксації плюсів і мінусів на альфі.\n\n"
         "Пиши типу +5 або -3, +3.5 щоб оновити баланс.\n"
         "Команда /reset — скинути баланс.\n\n"
@@ -53,19 +53,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_data = {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
-    await save_user(user_id, user_data)
-    await update.message.reply_text("✅ Баланс скинуто!")
+    save_user(user_id, user_data)
+    update.message.reply_text("✅ Баланс скинуто!")
 
 # -------------------- Обробка тексту --------------------
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data = await get_user(user_id)
+    user_data = get_user(user_id)
     text = update.message.text.strip().lower()
 
-    # --- Якщо + або -
     if text.startswith(("+", "-")):
         try:
             value = float(text.replace(" ", ""))
@@ -75,10 +74,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_data["minus"] += abs(value)
 
             user_data["balance"] = round(user_data["plus"] - user_data["minus"], 2)
-            await save_user(user_id, user_data)
+            save_user(user_id, user_data)
 
             text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
-            await update.message.reply_text(
+            update.message.reply_text(
                 f"✅ Плюс: {round(user_data['plus'],2)}\n"
                 f"❌ Мінус: {round(user_data['minus'],2)}\n"
                 f"💰 Баланс: {round(user_data['balance'],2)}\n\n"
@@ -86,42 +85,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
         except ValueError:
-            await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
+            update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
         return
 
-    # --- Якщо написав "прокрутив"
     if "прокрутив" in text:
         user_data["last_ack"] = datetime.now(timezone.utc).isoformat()
-        await save_user(user_id, user_data)
-        await update.message.reply_text("🔥 Красава, альфа прокручена")
+        save_user(user_id, user_data)
+        update.message.reply_text("🔥 Красава, альфа прокручена")
         return
 
-    # Інший текст
-    await update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
+    update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
 
 # -------------------- Адмін-розсилка --------------------
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Тільки адміністратор може використовувати цю команду.")
+        update.message.reply_text("❌ Тільки адміністратор може використовувати цю команду.")
         return
 
     if not context.args:
-        await update.message.reply_text("❌ Вкажи повідомлення для розсилки: /broadcast Текст")
+        update.message.reply_text("❌ Вкажи повідомлення для розсилки: /broadcast Текст")
         return
 
     message = " ".join(context.args)
     success, fail = 0, 0
 
-    users = await redis.smembers("users")
+    users = redis.smembers("users")
     for uid in users:
         try:
-            await context.bot.send_message(chat_id=int(uid), text=message, parse_mode="HTML")
+            context.bot.send_message(chat_id=int(uid), text=message, parse_mode="HTML")
             success += 1
         except Exception as e:
             print(f"⚠️ Не вдалося надіслати {uid}: {e}")
             fail += 1
 
-    await update.message.reply_text(f"✅ Розсилка завершена! Успішно: {success}, Не вдалося: {fail}")
+    update.message.reply_text(f"✅ Розсилка завершена! Успішно: {success}, Не вдалося: {fail}")
 
 # -------------------- Щоденні нагадування --------------------
 async def daily_reminder(app: Application):
@@ -133,7 +130,7 @@ async def daily_reminder(app: Application):
 
         await asyncio.sleep((target - now).total_seconds())
 
-        users = await redis.smembers("users")
+        users = redis.smembers("users")
         for uid in users:
             try:
                 await app.bot.send_message(chat_id=int(uid), text="🔔 Прокрути альфу!")
