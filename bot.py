@@ -72,13 +72,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_data["balance"] = round(user_data["plus"] - user_data["minus"], 2)
             save_user(user_id, user_data)
 
-   await update.message.reply_text(
+  await update.message.reply_text(
     f"✅ Плюс: {round(user_data['plus'], 2)}\n"
     f"❌ Мінус: {round(user_data['minus'], 2)}\n"
-    f"💰 Баланс: {round(user_data['balance'], 2)}\n\n"
-    f"<a href='https://t.me/l1xosha'>Канал Автора</a>",
-    parse_mode="HTML",
-    disable_web_page_preview=True
+    f"💰 Баланс: {round(user_data['balance'], 2)}"
 )
         except ValueError:
             await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
