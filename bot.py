@@ -37,12 +37,12 @@ def save_user(user_id: str, user_data: dict):
     redis.sadd("users", user_id)  # Для розсилки
 
 # -------------------- Команди --------------------
-def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_data = get_user(user_id)
     save_user(user_id, user_data)
     text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
-    update.message.reply_text(
+    await update.message.reply_text(
         "👋 Привіт! Я бот для фіксації плюсів і мінусів на альфі.\n\n"
         "Пиши типу +5 або -3, +3.5 щоб оновити баланс.\n"
         "Команда /reset — скинути баланс.\n\n"
@@ -53,114 +53,6 @@ def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data = {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
-    save_user(user_id, user_data)
-    update.message.reply_text("✅ Баланс скинуто!")
-
-# -------------------- Обробка тексту --------------------
-def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    user_data = get_user(user_id)
-    text = update.message.text.strip().lower()
-
-    if text.startswith(("+", "-")):
-        try:
-            value = float(text.replace(" ", ""))
-            if value > 0:
-                user_data["plus"] += value
-            else:
-                user_data["minus"] += abs(value)
-
-            user_data["balance"] = round(user_data["plus"] - user_data["minus"], 2)
-            save_user(user_id, user_data)
-
-            text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
-            update.message.reply_text(
-                f"✅ Плюс: {round(user_data['plus'],2)}\n"
-                f"❌ Мінус: {round(user_data['minus'],2)}\n"
-                f"💰 Баланс: {round(user_data['balance'],2)}\n\n"
-                f"{text_safe}",
-                parse_mode="HTML"
-            )
-        except ValueError:
-            update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
-        return
-
-    if "прокрутив" in text:
-        user_data["last_ack"] = datetime.now(timezone.utc).isoformat()
-        save_user(user_id, user_data)
-        update.message.reply_text("🔥 Красава, альфа прокручена")
-        return
-
-    update.message.reply_text("Пиши лише числа або «прокрутив» 😉")
-
-# -------------------- Адмін-розсилка --------------------
-def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        update.message.reply_text("❌ Тільки адміністратор може використовувати цю команду.")
-        return
-
-    if not context.args:
-        update.message.reply_text("❌ Вкажи повідомлення для розсилки: /broadcast Текст")
-        return
-
-    message = " ".join(context.args)
-    success, fail = 0, 0
-
-    users = redis.smembers("users")
-    for uid in users:
-        try:
-            context.bot.send_message(chat_id=int(uid), text=message, parse_mode="HTML")
-            success += 1
-        except Exception as e:
-            print(f"⚠️ Не вдалося надіслати {uid}: {e}")
-            fail += 1
-
-    update.message.reply_text(f"✅ Розсилка завершена! Успішно: {success}, Не вдалося: {fail}")
-
-# -------------------- Щоденні нагадування --------------------
-async def daily_reminder(app: Application):
-    while True:
-        now = datetime.now(timezone.utc)
-        target = now.replace(hour=21, minute=0, second=0, microsecond=0)  # 23:00 Київ UTC+2 → 21:00 UTC
-        if now > target:
-            target += timedelta(days=1)
-
-        await asyncio.sleep((target - now).total_seconds())
-
-        users = redis.smembers("users")
-        for uid in users:
-            try:
-                await app.bot.send_message(chat_id=int(uid), text="🔔 Прокрути альфу!")
-            except Exception as e:
-                print(f"⚠️ Не вдалося надіслати {uid}: {e}")
-
-        # Друге нагадування через 2 години
-        await asyncio.sleep(7200)
-        for uid in users:
-            try:
-                await app.bot.send_message(chat_id=int(uid), text="⏰ Якщо ще не прокрутив — саме час!")
-            except Exception as e:
-                print(f"⚠️ Не вдалося надіслати (2) {uid}: {e}")
-
-# -------------------- Основна функція --------------------
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("broadcast", broadcast))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    async def start_tasks(app: Application):
-        asyncio.create_task(daily_reminder(app))
-
-    app.post_init = start_tasks
-
-    print("🤖 Бот запущено з Upstash Redis!")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+    user_data = {"plus": 0.0, "minus": 0.0, "balance": 
