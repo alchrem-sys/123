@@ -47,7 +47,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Щодня о 23:00 за Києвом приходить нагадування 🔔 «прокрути альфу».\n"
         "Напиши «прокрутив», щоб підтвердити.\n\n"
         f"Знайшли помилку? - {text_safe}",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        disable_web_page_preview=True
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -84,7 +85,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"❌ Мінус: {round(user_data['minus'],2)}\n"
                 f"💰 Баланс: {round(user_data['balance'],2)}\n\n"
                 f"{text_safe}",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                disable_web_page_preview=True
             )
         except ValueError:
             await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
@@ -114,7 +116,12 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = redis.smembers("users")
     for uid in users:
         try:
-            await context.bot.send_message(chat_id=int(uid), text=message, parse_mode="HTML")
+            await context.bot.send_message(
+                chat_id=int(uid),
+                text=message,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
             success += 1
         except Exception as e:
             print(f"⚠️ Не вдалося надіслати {uid}: {e}")
@@ -135,14 +142,22 @@ async def daily_reminder(app: Application):
         users = redis.smembers("users")
         for uid in users:
             try:
-                await app.bot.send_message(chat_id=int(uid), text="🔔 Прокрути альфу!")
+                await app.bot.send_message(
+                    chat_id=int(uid),
+                    text="🔔 Прокрути альфу!",
+                    disable_web_page_preview=True
+                )
             except Exception as e:
                 print(f"⚠️ Не вдалося надіслати {uid}: {e}")
 
         await asyncio.sleep(7200)
         for uid in users:
             try:
-                await app.bot.send_message(chat_id=int(uid), text="⏰ Якщо ще не прокрутив — саме час!")
+                await app.bot.send_message(
+                    chat_id=int(uid),
+                    text="⏰ Якщо ще не прокрутив — саме час!",
+                    disable_web_page_preview=True
+                )
             except Exception as e:
                 print(f"⚠️ Не вдалося надіслати (2) {uid}: {e}")
 
