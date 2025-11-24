@@ -1,3 +1,5 @@
+це бот для тг який ти мені зробив ось код бота 
+
 import os
 import json
 import asyncio
@@ -72,11 +74,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_data["balance"] = round(user_data["plus"] - user_data["minus"], 2)
             save_user(user_id, user_data)
 
-  await update.message.reply_text(
-    f"✅ Плюс: {round(user_data['plus'], 2)}\n"
-    f"❌ Мінус: {round(user_data['minus'], 2)}\n"
-    f"💰 Баланс: {round(user_data['balance'], 2)}"
-)
+            await update.message.reply_text(
+                f"✅ Плюс: {round(user_data['plus'], 2)}\n"
+                f"❌ Мінус: {round(user_data['minus'], 2)}\n"
+                f"💰 Баланс: {round(user_data['balance'], 2)}"
+            )
         except ValueError:
             await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
     elif "прокрутив" in text:
@@ -154,6 +156,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
