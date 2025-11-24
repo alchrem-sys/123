@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 from datetime import datetime, timedelta, timezone
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from upstash_redis import Redis
 
@@ -26,41 +26,43 @@ if not REDIS_URL or not REDIS_TOKEN:
 redis = Redis(url=REDIS_URL, token=REDIS_TOKEN)
 
 # -------------------- Функції для користувачів --------------------
-def get_user(user_id: str):
-    data = redis.get(user_id)
+async def get_user(user_id: str):
+    data = await redis.get(user_id)
     if data:
         return json.loads(data)
     return {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
 
-def save_user(user_id: str, user_data: dict):
-    redis.set(user_id, json.dumps(user_data))
+async def save_user(user_id: str, user_data: dict):
+    await redis.set(user_id, json.dumps(user_data))
+    await redis.sadd("users", user_id)  # Для зручної розсилки
 
 # -------------------- Команди --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data = get_user(user_id)
-    save_user(user_id, user_data)
+    user_data = await get_user(user_id)
+    await save_user(user_id, user_data)
+    text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
     await update.message.reply_text(
-        "👋 Привіт, Я бот для фіксації плюсів і мінусів на альфі.\n\n"
+        "👋 Привіт! Я бот для фіксації плюсів і мінусів на альфі.\n\n"
         "Пиши типу +5 або -3, +3.5 щоб оновити баланс.\n"
         "Команда /reset — скинути баланс.\n\n"
-        "Числа типу 3.5 писати тільки через крапку\n"
+        "Числа типу 3.5 писати тільки через крапку.\n"
         "Щодня о 23:00 за Києвом приходить нагадування 🔔 «прокрути альфу».\n"
         "Напиши «прокрутив», щоб підтвердити.\n\n"
-        "Знайшли помилку? - @l1oxsha"
+        f"Знайшли помилку? - {text_safe}",
+        parse_mode="HTML"
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_data = {"plus": 0.0, "minus": 0.0, "balance": 0.0, "last_ack": None}
-    save_user(user_id, user_data)
+    await save_user(user_id, user_data)
     await update.message.reply_text("✅ Баланс скинуто!")
 
 # -------------------- Обробка тексту --------------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    user_data = get_user(user_id)
-
+    user_data = await get_user(user_id)
     text = update.message.text.strip().lower()
 
     # --- Якщо + або -
@@ -73,19 +75,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_data["minus"] += abs(value)
 
             user_data["balance"] = round(user_data["plus"] - user_data["minus"], 2)
-            save_user(user_id, user_data)
+            await save_user(user_id, user_data)
 
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Канал Автора", url="https://t.me/l1xosha")]
-            ])
-
+            text_safe = '<a href="https://t.me/l1xosha">Канал Автора</a>'
             await update.message.reply_text(
-                f"✅ Плюс: {round(user_data['plus'], 2)}\n"
-                f"❌ Мінус: {round(user_data['minus'], 2)}\n"
-                f"💰 Баланс: {round(user_data['balance'], 2)}",
-                reply_markup=keyboard
+                f"✅ Плюс: {round(user_data['plus'],2)}\n"
+                f"❌ Мінус: {round(user_data['minus'],2)}\n"
+                f"💰 Баланс: {round(user_data['balance'],2)}\n\n"
+                f"{text_safe}",
+                parse_mode="HTML"
             )
-
         except ValueError:
             await update.message.reply_text("Пиши лише числа зі знаком (типу +5 або -3).")
         return
@@ -93,7 +92,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- Якщо написав "прокрутив"
     if "прокрутив" in text:
         user_data["last_ack"] = datetime.now(timezone.utc).isoformat()
-        save_user(user_id, user_data)
+        await save_user(user_id, user_data)
         await update.message.reply_text("🔥 Красава, альфа прокручена")
         return
 
@@ -113,10 +112,10 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = " ".join(context.args)
     success, fail = 0, 0
 
-    keys = redis.keys("*")
-    for uid in keys:
+    users = await redis.smembers("users")
+    for uid in users:
         try:
-            await context.bot.send_message(chat_id=int(uid), text=message)
+            await context.bot.send_message(chat_id=int(uid), text=message, parse_mode="HTML")
             success += 1
         except Exception as e:
             print(f"⚠️ Не вдалося надіслати {uid}: {e}")
@@ -128,14 +127,14 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def daily_reminder(app: Application):
     while True:
         now = datetime.now(timezone.utc)
-        target = now.replace(hour=21, minute=0, second=0, microsecond=0)
+        target = now.replace(hour=21, minute=0, second=0, microsecond=0)  # 23:00 Київ UTC+2 → 21:00 UTC
         if now > target:
             target += timedelta(days=1)
 
         await asyncio.sleep((target - now).total_seconds())
 
-        keys = redis.keys("*")
-        for uid in keys:
+        users = await redis.smembers("users")
+        for uid in users:
             try:
                 await app.bot.send_message(chat_id=int(uid), text="🔔 Прокрути альфу!")
             except Exception as e:
@@ -143,7 +142,7 @@ async def daily_reminder(app: Application):
 
         # Друге нагадування через 2 години
         await asyncio.sleep(7200)
-        for uid in keys:
+        for uid in users:
             try:
                 await app.bot.send_message(chat_id=int(uid), text="⏰ Якщо ще не прокрутив — саме час!")
             except Exception as e:
